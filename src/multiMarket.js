@@ -7,7 +7,7 @@ const marketListeners = new Map(); // symbol -> Set<callback>
 let markets = []; // populated dynamically from Deriv's live symbol list
 let loadPromise = null;
 
-const STAGGER_MS = 250;
+const STAGGER_MS = 750;
 
 function ensureSubscribed(symbol) {
   if (marketState.has(symbol)) return;

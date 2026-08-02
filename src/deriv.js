@@ -15,12 +15,14 @@ let ws = null;
 let currentSymbol = null;
 let reconnectAttempts = 0;
 let reconnectTimer = null;
+let keepaliveTimer = null;
 let reqIdCounter = 1;
 let onOpenQueue = [];
 const pendingRequests = new Map();
 const tickListeners = new Set();
 const statusListeners = new Set();
 const symbolSubscriptions = new Map(); // symbol -> Set<callback>, independent of currentSymbol
+const PING_INTERVAL_MS = 30000;
 
 function emitStatus(status) {
   statusListeners.forEach((cb) => cb(status));
@@ -71,6 +73,14 @@ export function connect(symbol) {
     const queued = onOpenQueue;
     onOpenQueue = [];
     queued.forEach((fn) => fn());
+
+    // A light periodic ping keeps the connection alive on its own terms,
+    // rather than letting it silently time out and forcing a reconnect
+    // (Deriv support flagged "reconnect storms" as something to avoid).
+    if (keepaliveTimer) clearInterval(keepaliveTimer);
+    keepaliveTimer = setInterval(() => {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ ping: 1 }));
+    }, PING_INTERVAL_MS);
   };
 
   ws.onmessage = (msg) => {
@@ -110,6 +120,7 @@ export function connect(symbol) {
 
   ws.onclose = (event) => {
     console.warn(`[deriv] WebSocket closed. code=${event.code} reason="${event.reason || 'none given'}" clean=${event.wasClean}`);
+    if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
     emitStatus(`disconnected (code ${event.code}) — retrying…`);
     scheduleReconnect();
   };
