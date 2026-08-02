@@ -60,6 +60,10 @@ export function connect(symbol) {
   ws.onopen = () => {
     reconnectAttempts = 0;
     emitStatus('live');
+    // Clear out any subscriptions the server might still be holding from a
+    // previous, abnormally-closed connection before asking for fresh ones —
+    // otherwise repeated reconnects can quietly pile up orphaned streams.
+    ws.send(JSON.stringify({ forget_all: 'ticks' }));
     ws.send(JSON.stringify({ ticks: currentSymbol, subscribe: 1 }));
     symbolSubscriptions.forEach((_, symbol) => {
       if (symbol !== currentSymbol) ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
@@ -117,6 +121,16 @@ function scheduleReconnect() {
   reconnectTimer = setTimeout(() => {
     if (currentSymbol) connect(currentSymbol);
   }, delay);
+}
+
+// Tell Deriv we're done before the tab actually closes, so subscriptions
+// don't linger server-side waiting for the socket to time out on its own.
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try { ws.send(JSON.stringify({ forget_all: 'ticks' })); } catch (e) { /* noop */ }
+    }
+  });
 }
 
 export function changeSymbol(symbol) {
