@@ -26,14 +26,19 @@ function ensureSubscribed(symbol) {
 // (especially the 1-second variants) without much notice.
 export async function loadMarkets() {
   if (loadPromise) return loadPromise;
-  loadPromise = fetchActiveSymbols().then((symbols) => {
-    markets = symbols
-      .filter((s) => /volatility/i.test(s.display_name))
-      .map((s) => ({ symbol: s.symbol, name: s.display_name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-    markets.forEach(({ symbol }) => ensureSubscribed(symbol));
-    return markets;
-  });
+  loadPromise = fetchActiveSymbols()
+    .then((symbols) => {
+      markets = symbols
+        .filter((s) => /volatility/i.test(s.display_name))
+        .map((s) => ({ symbol: s.symbol, name: s.display_name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      markets.forEach(({ symbol }) => ensureSubscribed(symbol));
+      return markets;
+    })
+    .catch((err) => {
+      loadPromise = null; // allow a fresh attempt instead of replaying this rejection forever
+      throw err;
+    });
   return loadPromise;
 }
 

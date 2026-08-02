@@ -21,7 +21,24 @@ const els = {
   tapeSymbol: document.getElementById('tapeSymbol'),
   tabsNav: document.getElementById('tabs'),
   tabContent: document.getElementById('tabContent'),
+  themeToggle: document.getElementById('themeToggle'),
 };
+
+function applyTheme(theme) {
+  if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  localStorage.setItem('theme', theme);
+  [...els.themeToggle.children].forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.themeChoice === theme);
+  });
+}
+
+els.themeToggle.addEventListener('click', (e) => {
+  const choice = e.target.dataset.themeChoice;
+  if (choice) applyTheme(choice);
+});
+
+applyTheme(localStorage.getItem('theme') === 'dark' ? 'dark' : 'light');
 
 let activeTab = 'matches-differs';
 let unmountCurrentTab = null;
@@ -104,6 +121,6 @@ async function populateMarkets() {
 }
 
 subscribe(renderHeader);
-switchTab(activeTab);
 init();
+switchTab(activeTab);
 populateMarkets();
