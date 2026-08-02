@@ -7,6 +7,8 @@ const marketListeners = new Map(); // symbol -> Set<callback>
 let markets = []; // populated dynamically from Deriv's live symbol list
 let loadPromise = null;
 
+const STAGGER_MS = 250;
+
 function ensureSubscribed(symbol) {
   if (marketState.has(symbol)) return;
   marketState.set(symbol, { digits: [], lastPrice: null });
@@ -17,6 +19,16 @@ function ensureSubscribed(symbol) {
     s.lastPrice = quote;
     const listeners = marketListeners.get(symbol);
     if (listeners) listeners.forEach((cb) => cb(s));
+  });
+}
+
+// Subscribing to every market at once, all in the same instant, looks like
+// exactly the kind of burst pattern connection-abuse detection reacts to.
+// Spacing requests out a fraction of a second apart is gentler on the
+// same app_id and avoids retriggering the rate limit we hit earlier.
+function subscribeAllStaggered(symbols) {
+  symbols.forEach(({ symbol }, i) => {
+    setTimeout(() => ensureSubscribed(symbol), i * STAGGER_MS);
   });
 }
 
@@ -32,7 +44,7 @@ export async function loadMarkets() {
         .filter((s) => /volatility/i.test(s.display_name))
         .map((s) => ({ symbol: s.symbol, name: s.display_name }))
         .sort((a, b) => a.name.localeCompare(b.name));
-      markets.forEach(({ symbol }) => ensureSubscribed(symbol));
+      subscribeAllStaggered(markets);
       return markets;
     })
     .catch((err) => {
