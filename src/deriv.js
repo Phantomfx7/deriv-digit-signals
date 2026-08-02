@@ -20,6 +20,7 @@ let onOpenQueue = [];
 const pendingRequests = new Map();
 const tickListeners = new Set();
 const statusListeners = new Set();
+const symbolSubscriptions = new Map(); // symbol -> Set<callback>, independent of currentSymbol
 
 function emitStatus(status) {
   statusListeners.forEach((cb) => cb(status));
@@ -60,6 +61,9 @@ export function connect(symbol) {
     reconnectAttempts = 0;
     emitStatus('live');
     ws.send(JSON.stringify({ ticks: currentSymbol, subscribe: 1 }));
+    symbolSubscriptions.forEach((_, symbol) => {
+      if (symbol !== currentSymbol) ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
+    });
     const queued = onOpenQueue;
     onOpenQueue = [];
     queued.forEach((fn) => fn());
@@ -83,14 +87,15 @@ export function connect(symbol) {
     }
     if (data.msg_type === 'tick' && data.tick) {
       const quote = data.tick.quote;
-      tickListeners.forEach((cb) =>
-        cb({
-          digit: extractLastDigit(quote),
-          quote,
-          symbol: data.tick.symbol,
-          epoch: data.tick.epoch,
-        })
-      );
+      const payload = {
+        digit: extractLastDigit(quote),
+        quote,
+        symbol: data.tick.symbol,
+        epoch: data.tick.epoch,
+      };
+      tickListeners.forEach((cb) => cb(payload));
+      const subs = symbolSubscriptions.get(data.tick.symbol);
+      if (subs) subs.forEach((cb) => cb(payload));
     }
   };
 
@@ -126,6 +131,22 @@ export function changeSymbol(symbol) {
 
 export function getSymbol() {
   return currentSymbol;
+}
+
+// Subscribe to ticks for a specific symbol independent of the single
+// "active" market the header/other tabs use. Used by the Matches/Differs
+// card view to watch several markets at once on the same connection.
+export function subscribeTicks(symbol, callback) {
+  let set = symbolSubscriptions.get(symbol);
+  if (!set) {
+    set = new Set();
+    symbolSubscriptions.set(symbol, set);
+    const request = () => ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
+    if (ws && ws.readyState === WebSocket.OPEN) request();
+    else onOpenQueue.push(request);
+  }
+  set.add(callback);
+  return () => set.delete(callback);
 }
 
 function send(request) {

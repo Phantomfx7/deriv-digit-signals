@@ -1,0 +1,57 @@
+import { subscribeTicks, fetchActiveSymbols } from './deriv.js';
+
+const MAX_BUFFER = 200;
+
+const marketState = new Map(); // symbol -> { digits: [], lastPrice: null }
+const marketListeners = new Map(); // symbol -> Set<callback>
+let markets = []; // populated dynamically from Deriv's live symbol list
+let loadPromise = null;
+
+function ensureSubscribed(symbol) {
+  if (marketState.has(symbol)) return;
+  marketState.set(symbol, { digits: [], lastPrice: null });
+  subscribeTicks(symbol, ({ digit, quote }) => {
+    const s = marketState.get(symbol);
+    s.digits.push(digit);
+    if (s.digits.length > MAX_BUFFER) s.digits.shift();
+    s.lastPrice = quote;
+    const listeners = marketListeners.get(symbol);
+    if (listeners) listeners.forEach((cb) => cb(s));
+  });
+}
+
+// Pulls every currently-live volatility index straight from Deriv rather
+// than hardcoding a list — this is the same fix we used for the market
+// dropdown, and for the same reason: Deriv adds/retires instruments
+// (especially the 1-second variants) without much notice.
+export async function loadMarkets() {
+  if (loadPromise) return loadPromise;
+  loadPromise = fetchActiveSymbols().then((symbols) => {
+    markets = symbols
+      .filter((s) => /volatility/i.test(s.display_name))
+      .map((s) => ({ symbol: s.symbol, name: s.display_name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    markets.forEach(({ symbol }) => ensureSubscribed(symbol));
+    return markets;
+  });
+  return loadPromise;
+}
+
+export function getMarkets() {
+  return markets;
+}
+
+export function subscribeMarket(symbol, callback) {
+  let set = marketListeners.get(symbol);
+  if (!set) {
+    set = new Set();
+    marketListeners.set(symbol, set);
+  }
+  set.add(callback);
+  return () => set.delete(callback);
+}
+
+export function getMarketDigits(symbol, n) {
+  const s = marketState.get(symbol);
+  return s ? s.digits.slice(-n) : [];
+}
