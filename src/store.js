@@ -21,7 +21,8 @@ function notify() {
   subscribers.forEach((cb) => cb(state));
 }
 
-onTick(({ digit, quote }) => {
+onTick(({ digit, quote, symbol }) => {
+  if (symbol !== state.symbol) return; // ignore ticks from other markets (card view, etc.)
   state.digits.push(digit);
   if (state.digits.length > MAX_BUFFER) state.digits.shift();
   state.lastPrice = quote;

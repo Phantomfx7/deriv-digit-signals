@@ -19,6 +19,7 @@ const pendingRequests = new Map();
 const tickListeners = new Set();
 const statusListeners = new Set();
 const symbolSubscriptions = new Map(); // symbol -> Set<callback>, independent of currentSymbol
+const activeSubscriptions = new Set(); // symbols we've actually sent a subscribe request for
 const PING_INTERVAL_MS = 30000;
 
 function emitStatus(status) {
@@ -63,9 +64,15 @@ export function connect(symbol) {
     // previous, abnormally-closed connection before asking for fresh ones —
     // otherwise repeated reconnects can quietly pile up orphaned streams.
     ws.send(JSON.stringify({ forget_all: 'ticks' }));
-    ws.send(JSON.stringify({ ticks: currentSymbol, subscribe: 1 }));
-    symbolSubscriptions.forEach((_, symbol) => {
-      if (symbol !== currentSymbol) ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
+    activeSubscriptions.clear();
+    // currentSymbol and the multi-market symbols can overlap (e.g. R_100 is
+    // both the header's default and one of the card-view markets) — combine
+    // them into one set so we never send the same symbol twice.
+    const allSymbols = new Set([currentSymbol, ...symbolSubscriptions.keys()]);
+    allSymbols.forEach((symbol) => {
+      if (!symbol) return;
+      ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
+      activeSubscriptions.add(symbol);
     });
     const queued = onOpenQueue;
     onOpenQueue = [];
@@ -143,9 +150,10 @@ if (typeof window !== 'undefined') {
 
 export function changeSymbol(symbol) {
   currentSymbol = symbol;
+  if (activeSubscriptions.has(symbol)) return; // already streaming (e.g. shared with a card view)
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ forget_all: 'ticks' }));
     ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
+    activeSubscriptions.add(symbol);
   } else {
     connect(symbol);
   }
@@ -163,11 +171,15 @@ export function subscribeTicks(symbol, callback) {
   if (!set) {
     set = new Set();
     symbolSubscriptions.set(symbol, set);
+  }
+  set.add(callback);
+
+  if (!activeSubscriptions.has(symbol)) {
+    activeSubscriptions.add(symbol);
     const request = () => ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
     if (ws && ws.readyState === WebSocket.OPEN) request();
     else onOpenQueue.push(request);
   }
-  set.add(callback);
   return () => set.delete(callback);
 }
 
