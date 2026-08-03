@@ -41,8 +41,8 @@ export async function loadMarkets() {
   loadPromise = fetchActiveSymbols()
     .then((symbols) => {
       markets = symbols
-        .filter((s) => /volatility/i.test(s.display_name))
-        .map((s) => ({ symbol: s.symbol, name: s.display_name }))
+        .filter((s) => /volatility/i.test(s.underlying_symbol_name))
+        .map((s) => ({ symbol: s.underlying_symbol, name: s.underlying_symbol_name }))
         .sort((a, b) => a.name.localeCompare(b.name));
       subscribeAllStaggered(markets);
       return markets;

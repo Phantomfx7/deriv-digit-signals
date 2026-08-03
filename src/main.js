@@ -100,18 +100,18 @@ async function populateMarkets() {
     const symbols = await fetchActiveSymbols();
     if (symbols.length === 0) return; // keep the static fallback in index.html
 
-    const sorted = [...symbols].sort((a, b) => a.display_name.localeCompare(b.display_name));
+    const sorted = [...symbols].sort((a, b) => a.underlying_symbol_name.localeCompare(b.underlying_symbol_name));
     els.symbolSelect.innerHTML = sorted
-      .map((s) => `<option value="${s.symbol}">${s.display_name}</option>`)
+      .map((s) => `<option value="${s.underlying_symbol}">${s.underlying_symbol_name}</option>`)
       .join('');
 
-    const stillValid = sorted.some((s) => s.symbol === state.symbol);
+    const stillValid = sorted.some((s) => s.underlying_symbol === state.symbol);
     if (stillValid) {
       els.symbolSelect.value = state.symbol;
     } else {
       // our default (or last-picked) symbol isn't live anymore — fall back
       // to the first available market instead of erroring
-      const fallback = sorted[0].symbol;
+      const fallback = sorted[0].underlying_symbol;
       els.symbolSelect.value = fallback;
       changeSymbol(fallback);
     }
