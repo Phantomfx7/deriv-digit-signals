@@ -47,7 +47,7 @@ function advancePhase({ phase, remaining }) {
 function phaseText({ phase, remaining }) {
   if (phase === 'upcoming') return `Upcoming prediction in ${remaining}s`;
   if (phase === 'entry') return `Entry countdown in ${remaining}sec`;
-  return 'Execute Trade Now';
+  return 'EXECUTE TRADE NOW';
 }
 
 function phaseClass({ phase }) {
@@ -81,14 +81,16 @@ function cardHtml({ symbol, name }, palette) {
         <div class="live-badge"><span class="live-dot"></span>LIVE</div>
       </div>
       <div class="market-body">
-        <div class="market-ring" style="background:${palette.ring}">
-          <div class="market-ring-inner" style="background:${palette.bg}">
-            <span class="market-digit" style="color:${palette.fg}">—</span>
+        <div class="market-ring-wrap">
+          <div class="market-ring" style="background:${palette.ring}">
+            <div class="market-ring-inner" style="background:${palette.bg}">
+              <span class="market-digit" style="color:${palette.fg}">—</span>
+            </div>
           </div>
+          <svg class="market-spark" viewBox="0 0 120 40">
+            <polyline class="spark-line" fill="none" stroke="${palette.ring}" stroke-width="2" points="" />
+          </svg>
         </div>
-        <svg class="market-spark" viewBox="0 0 120 40">
-          <polyline class="spark-line" fill="none" stroke="${palette.ring}" stroke-width="2" points="" />
-        </svg>
       </div>
       <div class="market-confidence">Confidence: —</div>
       <div class="market-entry phase-upcoming">Upcoming prediction in ${UPCOMING_SECONDS}s</div>
