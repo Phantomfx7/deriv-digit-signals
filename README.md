@@ -1,4 +1,4 @@
-# Digit Signals — Deriv Volatility Tools
+# Quantum Analysis Tool — AI-Powered Analysis for Deriv Synthetic Markets
 
 A local dashboard for reading last-digit statistics on Deriv's synthetic
 volatility indices, built as tabs:
