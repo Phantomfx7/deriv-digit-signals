@@ -2,8 +2,9 @@ import { loadMarkets, subscribeMarket, getMarketDigits } from '../multiMarket.js
 
 const WINDOW = 50;
 const SPARK_POINTS = 15;
-const COUNTDOWN_MIN = 3;
-const COUNTDOWN_MAX = 6;
+const UPCOMING_SECONDS = 5;
+const ENTRY_SECONDS = 5;
+const EXECUTE_SECONDS = 2;
 
 // One palette per card, cycled by index. Volatility 10/25/50 (1s) intentionally
 // match the navy/gold, cream/gold, dark-green/green reference; the rest fill
@@ -31,8 +32,26 @@ function computeSignal(symbol) {
   return { digit: topDigit, confidence: Math.round((counts[topDigit] / digits.length) * 100), total: digits.length };
 }
 
-function randomCountdown() {
-  return COUNTDOWN_MIN + Math.floor(Math.random() * (COUNTDOWN_MAX - COUNTDOWN_MIN + 1));
+function initialPhase() {
+  return { phase: 'upcoming', remaining: UPCOMING_SECONDS };
+}
+
+function advancePhase({ phase, remaining }) {
+  const n = remaining - 1;
+  if (n > 0) return { phase, remaining: n };
+  if (phase === 'upcoming') return { phase: 'entry', remaining: ENTRY_SECONDS };
+  if (phase === 'entry') return { phase: 'execute', remaining: EXECUTE_SECONDS };
+  return { phase: 'upcoming', remaining: UPCOMING_SECONDS }; // was 'execute'
+}
+
+function phaseText({ phase, remaining }) {
+  if (phase === 'upcoming') return `Upcoming prediction in ${remaining}s`;
+  if (phase === 'entry') return `Entry countdown in ${remaining}sec`;
+  return 'Execute Trade Now';
+}
+
+function phaseClass({ phase }) {
+  return `market-entry phase-${phase}`;
 }
 
 function sparkPoints(symbol, color) {
@@ -72,7 +91,7 @@ function cardHtml({ symbol, name }, palette) {
         </svg>
       </div>
       <div class="market-confidence">Confidence: —</div>
-      <div class="market-entry">ENTRY IN —</div>
+      <div class="market-entry phase-upcoming">Upcoming prediction in ${UPCOMING_SECONDS}s</div>
     </div>
   `;
 }
@@ -89,14 +108,14 @@ export function mount(container) {
   let cancelled = false;
   let timer = null;
   const unsubscribers = [];
-  const countdowns = new Map();
+  const phases = new Map();
 
   function cleanupSubs() {
     if (timer) clearInterval(timer);
     timer = null;
     unsubscribers.forEach((unsub) => unsub());
     unsubscribers.length = 0;
-    countdowns.clear();
+    phases.clear();
   }
 
   function attemptLoad() {
@@ -112,7 +131,6 @@ export function mount(container) {
         const card = container.querySelector(`.market-card[data-symbol="${symbol}"]`);
         const digitEl = card.querySelector('.market-digit');
         const confEl = card.querySelector('.market-confidence');
-        const entryEl = card.querySelector('.market-entry');
         const sparkEl = card.querySelector('.spark-line');
 
         function render() {
@@ -126,8 +144,7 @@ export function mount(container) {
         unsubscribers.push(subscribeMarket(symbol, render));
         render();
 
-        countdowns.set(symbol, randomCountdown());
-        entryEl.textContent = `ENTRY IN ${countdowns.get(symbol)}S`;
+        phases.set(symbol, initialPhase());
       });
 
       // A shared, steady visual pace across all cards — not a claim about
@@ -138,10 +155,10 @@ export function mount(container) {
           const card = container.querySelector(`.market-card[data-symbol="${symbol}"]`);
           if (!card) return;
           const entryEl = card.querySelector('.market-entry');
-          let n = countdowns.get(symbol) - 1;
-          if (n <= 0) n = randomCountdown();
-          countdowns.set(symbol, n);
-          entryEl.textContent = `ENTRY IN ${n}S`;
+          const next = advancePhase(phases.get(symbol));
+          phases.set(symbol, next);
+          entryEl.textContent = phaseText(next);
+          entryEl.className = phaseClass(next);
         });
       }, 1000);
     }).catch((err) => {

@@ -128,4 +128,8 @@ input[type=range]{flex:1;accent-color:var(--match);}
 .market-spark{width:120px;height:44px;flex:0 0 auto;}
 
 .market-confidence{text-align:center;font-size:14px;font-weight:700;color:#D9A73B;margin-bottom:6px;}
-.market-entry{text-align:center;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#3ED598;letter-spacing:.03em;}
+.market-entry{text-align:center;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;letter-spacing:.03em;transition:color .2s;}
+.market-entry.phase-upcoming{color:#8FA3C8;font-weight:600;}
+.market-entry.phase-entry{color:#D9A73B;}
+.market-entry.phase-execute{color:#FF5C5C;font-size:17px;font-weight:800;letter-spacing:.05em;animation:execute-pulse 0.6s ease-in-out infinite;}
+@keyframes execute-pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.7;transform:scale(1.04);}}
