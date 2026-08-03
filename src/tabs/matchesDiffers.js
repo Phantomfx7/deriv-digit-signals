@@ -2,7 +2,7 @@ import { loadMarkets, subscribeMarket, getMarketDigits } from '../multiMarket.js
 
 const WINDOW = 50;
 const SPARK_POINTS = 15;
-const UPCOMING_SECONDS = 5;
+const UPCOMING_SECONDS = 10;
 const ENTRY_SECONDS = 5;
 const EXECUTE_SECONDS = 2;
 
@@ -94,6 +94,7 @@ function cardHtml({ symbol, name }, palette) {
       </div>
       <div class="market-confidence">Confidence: —</div>
       <div class="market-entry phase-upcoming">Upcoming prediction in ${UPCOMING_SECONDS}s</div>
+      <div class="market-subtext"></div>
     </div>
   `;
 }
@@ -157,10 +158,12 @@ export function mount(container) {
           const card = container.querySelector(`.market-card[data-symbol="${symbol}"]`);
           if (!card) return;
           const entryEl = card.querySelector('.market-entry');
+          const subtextEl = card.querySelector('.market-subtext');
           const next = advancePhase(phases.get(symbol));
           phases.set(symbol, next);
           entryEl.textContent = phaseText(next);
           entryEl.className = phaseClass(next);
+          subtextEl.textContent = next.phase === 'execute' ? 'Quantum window is open' : '';
         });
       }, 1000);
     }).catch((err) => {
