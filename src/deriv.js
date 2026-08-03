@@ -1,15 +1,12 @@
-// Shared connection to Deriv's public WebSocket API.
+// Shared connection to Deriv's API.
 //
-// app_id 1089 is Deriv's shared public demo id. It's meant for quick testing,
-// but Deriv can throttle or restrict it without notice — if you're seeing
-// "InvalidSymbol" errors on symbols that definitely exist (e.g. R_100), your
-// own registered app_id is the fix, not a different symbol code.
-//
-// Get a free one at https://developers.deriv.com/docs/app-registration,
-// then set VITE_DERIV_APP_ID in a .env file at the project root:
-//   VITE_DERIV_APP_ID=12345
-// (see .env.example)
-const APP_ID = import.meta.env.VITE_DERIV_APP_ID || 1089;
+// We use the same endpoint Deriv's own charts.deriv.com uses internally —
+// wss://api-core.deriv.com/options/v1/ws/public — rather than the older
+// wss://ws.derivws.com/websockets/v3 documented in most public tutorials.
+// The old endpoint proved unreliable for freshly-registered app_ids during
+// testing (immediate handshake failures), while this one connects cleanly
+// and needs no app_id in the URL at all for anonymous public market data.
+const WS_URL = 'wss://api-core.deriv.com/options/v1/ws/public';
 
 let ws = null;
 let currentSymbol = null;
@@ -57,7 +54,7 @@ export function connect(symbol) {
   }
   emitStatus('connecting');
 
-  ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
+  ws = new WebSocket(WS_URL);
 
   ws.onopen = () => {
     reconnectAttempts = 0;
