@@ -188,6 +188,6 @@ function send(request) {
 // trusting a hardcoded list — Deriv periodically adds/retires instruments
 // (this is exactly why a stale "1HZ25V" can suddenly start erroring).
 export async function fetchActiveSymbols() {
-  const data = await send({ active_symbols: 'brief', product_type: 'basic' });
+  const data = await send({ active_symbols: 'brief' });
   return (data.active_symbols || []).filter((s) => s.market === 'synthetic_index');
 }
