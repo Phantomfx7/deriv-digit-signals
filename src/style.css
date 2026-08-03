@@ -135,3 +135,5 @@ input[type=range]{flex:1;accent-color:var(--match);}
 .market-entry.phase-execute{color:#3ED598;font-size:17px;font-weight:800;letter-spacing:.05em;animation:execute-pulse 0.6s ease-in-out infinite;}
 @keyframes execute-pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.7;transform:scale(1.04);}}
 .market-subtext{text-align:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:#3ED598;letter-spacing:.08em;text-transform:uppercase;margin-top:4px;min-height:14px;opacity:.85;}
+.market-honesty{text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.03em;margin-top:2px;opacity:.7;}
+.market-accuracy{text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.03em;margin-top:10px;opacity:.7;}

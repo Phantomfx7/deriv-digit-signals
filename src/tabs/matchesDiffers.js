@@ -1,6 +1,7 @@
 import { loadMarkets, subscribeMarket, getMarketDigits } from '../multiMarket.js';
+import { runAnalysisCycle, recordOutcome, getAccuracy } from '../analysisEngine.js';
 
-const WINDOW = 50;
+const WINDOW = 100; // sample size the analysis engine draws on each cycle
 const SPARK_POINTS = 15;
 const UPCOMING_SECONDS = 10;
 const ENTRY_SECONDS = 5;
@@ -22,16 +23,6 @@ const PALETTES = [
   { bg: '#161233', ring: '#B4A8F5', fg: '#FFFFFF', fgMuted: '#C6BEE8' },
 ];
 
-function computeSignal(symbol) {
-  const digits = getMarketDigits(symbol, WINDOW);
-  if (digits.length === 0) return { digit: null, confidence: 0, total: 0 };
-  const counts = new Array(10).fill(0);
-  digits.forEach((d) => counts[d]++);
-  let topDigit = 0;
-  for (let d = 1; d < 10; d++) if (counts[d] > counts[topDigit]) topDigit = d;
-  return { digit: topDigit, confidence: Math.round((counts[topDigit] / digits.length) * 100), total: digits.length };
-}
-
 function initialPhase() {
   return { phase: 'upcoming', remaining: UPCOMING_SECONDS };
 }
@@ -41,7 +32,7 @@ function advancePhase({ phase, remaining }) {
   if (n > 0) return { phase, remaining: n };
   if (phase === 'upcoming') return { phase: 'entry', remaining: ENTRY_SECONDS };
   if (phase === 'entry') return { phase: 'execute', remaining: EXECUTE_SECONDS };
-  return { phase: 'upcoming', remaining: UPCOMING_SECONDS }; // was 'execute'
+  return { phase: 'upcoming', remaining: UPCOMING_SECONDS }; // was 'execute' — cycle boundary
 }
 
 function phaseText({ phase, remaining }) {
@@ -92,9 +83,11 @@ function cardHtml({ symbol, name }, palette) {
           </svg>
         </div>
       </div>
-      <div class="market-confidence">Confidence: —</div>
+      <div class="market-confidence">Match confidence: —</div>
+      <div class="market-honesty" style="color:${palette.fgMuted}">—</div>
       <div class="market-entry phase-upcoming">Upcoming prediction in ${UPCOMING_SECONDS}s</div>
       <div class="market-subtext"></div>
+      <div class="market-accuracy" style="color:${palette.fgMuted}">Tracking accuracy…</div>
     </div>
   `;
 }
@@ -112,6 +105,8 @@ export function mount(container) {
   let timer = null;
   const unsubscribers = [];
   const phases = new Map();
+  const cycleResults = new Map(); // symbol -> frozen analysis result for the current cycle
+  const runCycleFns = new Map(); // symbol -> function that (re)computes and displays a fresh cycle
 
   function cleanupSubs() {
     if (timer) clearInterval(timer);
@@ -119,6 +114,8 @@ export function mount(container) {
     unsubscribers.forEach((unsub) => unsub());
     unsubscribers.length = 0;
     phases.clear();
+    cycleResults.clear();
+    runCycleFns.clear();
   }
 
   function attemptLoad() {
@@ -134,20 +131,46 @@ export function mount(container) {
         const card = container.querySelector(`.market-card[data-symbol="${symbol}"]`);
         const digitEl = card.querySelector('.market-digit');
         const confEl = card.querySelector('.market-confidence');
+        const honestyEl = card.querySelector('.market-honesty');
         const sparkEl = card.querySelector('.spark-line');
+        const accEl = card.querySelector('.market-accuracy');
 
-        function render() {
-          const { digit, confidence, total } = computeSignal(symbol);
-          if (total === 0) return;
-          digitEl.textContent = digit;
-          confEl.textContent = `Confidence: ${confidence}%`;
+        // The sparkline is purely visual and can keep updating live —
+        // it's not a confidence claim, just a recent-digits trace.
+        function renderSpark() {
           sparkEl.setAttribute('points', sparkPoints(symbol, palette.ring));
         }
+        unsubscribers.push(subscribeMarket(symbol, renderSpark));
+        renderSpark();
 
-        unsubscribers.push(subscribeMarket(symbol, render));
-        render();
+        function updateAccuracyDisplay() {
+          const acc = getAccuracy(symbol);
+          accEl.textContent = acc
+            ? `Top-digit accuracy: ${acc.pct}% (n=${acc.n})`
+            : 'Tracking accuracy…';
+        }
 
+        // Runs once per analysis cycle — NOT on every tick. This is what
+        // keeps the displayed confidence stable through the countdown
+        // instead of flickering with every incoming tick.
+        function runCycle() {
+          const digits = getMarketDigits(symbol, WINDOW);
+          if (digits.length === 0) return;
+          const result = runAnalysisCycle(symbol, digits);
+          cycleResults.set(symbol, result);
+          digitEl.textContent = result.topDigit;
+          confEl.textContent = `Match confidence: ${Math.round(result.scores[result.topDigit])}%`;
+          honestyEl.textContent =
+            `entropy ${result.entropy.toFixed(2)}/${result.maxEntropy.toFixed(2)} · χ² p=${result.chiSquarePValue.toFixed(2)}`;
+        }
+
+        runCycleFns.set(symbol, runCycle);
+        runCycle();
+        updateAccuracyDisplay();
         phases.set(symbol, initialPhase());
+
+        // stash for the timer loop below
+        card._updateAccuracyDisplay = updateAccuracyDisplay;
       });
 
       // A shared, steady visual pace across all cards — not a claim about
@@ -159,11 +182,27 @@ export function mount(container) {
           if (!card) return;
           const entryEl = card.querySelector('.market-entry');
           const subtextEl = card.querySelector('.market-subtext');
-          const next = advancePhase(phases.get(symbol));
+          const prev = phases.get(symbol);
+          const next = advancePhase(prev);
           phases.set(symbol, next);
           entryEl.textContent = phaseText(next);
           entryEl.className = phaseClass(next);
           subtextEl.textContent = next.phase === 'execute' ? 'Quantum window is open' : '';
+
+          // Cycle boundary: score the just-finished cycle's top-ranked
+          // digit against whatever actually arrived, then start a fresh
+          // analysis cycle for the next one.
+          if (prev.phase === 'execute' && next.phase === 'upcoming') {
+            const prevResult = cycleResults.get(symbol);
+            const latestDigits = getMarketDigits(symbol, 1);
+            const actualDigit = latestDigits[latestDigits.length - 1];
+            if (prevResult && actualDigit !== undefined) {
+              recordOutcome(symbol, prevResult.topDigit, actualDigit);
+            }
+            const runCycle = runCycleFns.get(symbol);
+            if (runCycle) runCycle();
+            if (card._updateAccuracyDisplay) card._updateAccuracyDisplay();
+          }
         });
       }, 1000);
     }).catch((err) => {
